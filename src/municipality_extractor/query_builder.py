@@ -2,7 +2,7 @@
 
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -403,7 +403,7 @@ def _expand_with_synonyms(text: str) -> str:
 
 def build_queries(category: str, domain: str, comune: str, year: int,
                  allow_external: bool = False,
-                 extra_params: Optional[Dict[str, str]] = None) -> List[Dict[str, any]]:
+                 extra_params: Optional[Dict[str, str]] = None) -> List[Dict[str, Any]]:
     """Build search queries for a given category.
     
     Args:
