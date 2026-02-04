@@ -1,7 +1,7 @@
 """Heuristic extraction with regex and Italian number normalization."""
 
 import re
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict
 
 
 def normalize_italian_number(text: str) -> Optional[float]:
@@ -128,5 +128,3 @@ def extract_value_heuristic(text: str, keywords: List[str],
     
     return scored[:top_k]
 
-
-from typing import Dict

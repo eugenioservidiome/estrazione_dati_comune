@@ -7,8 +7,8 @@ from typing import Optional
 
 def detect_year_from_url(url: str) -> Optional[int]:
     """Detect year from URL or filename using regex."""
-    # Pattern: 4-digit year starting with 19 or 20
-    pattern = r'\b(19\d{2}|20\d{2})\b'
+    # Pattern: 4-digit year starting with 19 or 20, with flexible boundaries
+    pattern = r'(?:^|[/_\-\s])(19\d{2}|20\d{2})(?:[/_\-\s.]|$)'
     matches = re.findall(pattern, url)
     
     if matches:

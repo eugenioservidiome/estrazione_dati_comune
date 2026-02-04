@@ -3,7 +3,7 @@
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-from typing import Set, List, Optional
+from typing import Set, List, Optional, Tuple
 from collections import deque
 import xml.etree.ElementTree as ET
 
@@ -152,5 +152,3 @@ class Crawler:
         """Check if URL belongs to the same domain."""
         return urlparse(url).netloc == self.domain
 
-
-from typing import Tuple

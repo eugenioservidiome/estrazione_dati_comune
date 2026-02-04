@@ -15,7 +15,7 @@ from .pdf_text import extract_text, save_text, load_text
 from .paths import ensure_year_dirs, get_text_dir, get_llm_dir
 from .indexer import BM25Index
 from .retrieval import Retriever
-from .query_builder import generate_queries_for_dataframe
+from .query_builder import generate_queries_for_dataframe, generate_queries
 from .csv_io import (load_multiple_csvs, detect_missing_cells, save_filled_csv,
                     create_sources_csv, create_queries_csv, update_dataframe_cell)
 from .extract_heuristics import extract_value_heuristic
@@ -386,5 +386,3 @@ class Pipeline:
                           self.config.base_url, self.config.years)
         print(f"Report saved to {report_path}")
 
-
-from .query_builder import generate_queries

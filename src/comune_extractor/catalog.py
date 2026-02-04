@@ -2,7 +2,7 @@
 
 import sqlite3
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, List, Any
 from contextlib import contextmanager
@@ -104,7 +104,7 @@ class Catalog:
                 (sha1, url, original_name, local_path, detected_year, downloaded_at, content_type, size_bytes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (sha1, url, original_name, local_path, detected_year, 
-                  datetime.utcnow().isoformat(), content_type, size_bytes))
+                  datetime.now(timezone.utc).isoformat(), content_type, size_bytes))
             conn.commit()
     
     def update_pdf_year(self, sha1: str, detected_year: int):
@@ -132,7 +132,7 @@ class Catalog:
                 INSERT OR REPLACE INTO texts 
                 (sha1, text_path, extracted_at, extractor, pages, text_len)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (sha1, text_path, datetime.utcnow().isoformat(), 
+            """, (sha1, text_path, datetime.now(timezone.utc).isoformat(), 
                   extractor, pages, text_len))
             conn.commit()
     
@@ -151,7 +151,7 @@ class Catalog:
                 INSERT OR REPLACE INTO llm_cache 
                 (key, json_path, created_at, model)
                 VALUES (?, ?, ?, ?)
-            """, (key, json_path, datetime.utcnow().isoformat(), model))
+            """, (key, json_path, datetime.now(timezone.utc).isoformat(), model))
             conn.commit()
     
     def get_pdfs_by_year(self, year: Optional[int]) -> List[Dict[str, Any]]:
