@@ -1,4 +1,6 @@
-"""BM25 indexing with incremental updates and disk persistence."""
+"""BM25 indexing with incremental updates and disk persistence.
+Now supports page-level chunking instead of document-level indexing.
+"""
 
 import pickle
 from pathlib import Path
@@ -20,53 +22,53 @@ def simple_tokenize(text: str) -> List[str]:
 
 
 class BM25Index:
-    """BM25 index with disk persistence."""
+    """BM25 index with disk persistence. Now supports page-level chunks."""
     
     def __init__(self, index_dir: Path):
         self.index_dir = index_dir
         self.index_dir.mkdir(parents=True, exist_ok=True)
         
         self.bm25: Optional[BM25Okapi] = None
-        self.documents: List[Dict] = []  # metadata for each doc
+        self.chunks: List[Dict] = []  # metadata for each chunk (was documents)
         self.tokenized_corpus: List[List[str]] = []
     
-    def build_index(self, documents: List[Dict[str, Any]]):
+    def build_index(self, chunks: List[Dict[str, Any]]):
         """
-        Build BM25 index from documents.
-        Each document should have: {sha1, text, year, url, ...}
+        Build BM25 index from page chunks.
+        Each chunk should have: {sha1, text, year, url, filename, page_no, doc_kind(optional)}
         """
-        self.documents = documents
+        self.chunks = chunks
         self.tokenized_corpus = []
         
-        print(f"Tokenizing {len(documents)} documents...")
-        for doc in tqdm(documents, desc="Tokenizing"):
-            tokens = simple_tokenize(doc.get('text', ''))
+        print(f"Tokenizing {len(chunks)} chunks...")
+        for chunk in tqdm(chunks, desc="Tokenizing"):
+            tokens = simple_tokenize(chunk.get('text', ''))
             self.tokenized_corpus.append(tokens)
         
         print("Building BM25 index...")
         self.bm25 = BM25Okapi(self.tokenized_corpus)
-        print(f"Index built with {len(self.documents)} documents")
+        print(f"Index built with {len(self.chunks)} chunks")
     
-    def add_documents(self, new_documents: List[Dict[str, Any]]):
-        """Add new documents to existing index (incremental)."""
+    def add_chunks(self, new_chunks: List[Dict[str, Any]]):
+        """Add new chunks to existing index (incremental)."""
         if not self.bm25:
             # No existing index, just build fresh
-            self.build_index(new_documents)
+            self.build_index(new_chunks)
             return
         
         # Add to existing index
-        for doc in tqdm(new_documents, desc="Adding documents"):
-            tokens = simple_tokenize(doc.get('text', ''))
-            self.documents.append(doc)
+        for chunk in tqdm(new_chunks, desc="Adding chunks"):
+            tokens = simple_tokenize(chunk.get('text', ''))
+            self.chunks.append(chunk)
             self.tokenized_corpus.append(tokens)
         
         # Rebuild BM25 (there's no true incremental add in rank_bm25)
         print("Rebuilding BM25 index...")
         self.bm25 = BM25Okapi(self.tokenized_corpus)
     
-    def search(self, query: str, top_k: int = 10, year_filter: Optional[int] = None) -> List[Dict]:
+    def search(self, query: str, top_k: int = 8, year_filter: Optional[int] = None) -> List[Dict]:
         """
-        Search index and return top_k results.
+        Search index and return top_k chunk results (default 8, not 5).
         Optionally filter by year.
         """
         if not self.bm25:
@@ -78,14 +80,14 @@ class BM25Index:
         # Create results with scores
         results = []
         for idx, score in enumerate(scores):
-            doc = self.documents[idx]
+            chunk = self.chunks[idx]
             
             # Apply year filter if specified
-            if year_filter is not None and doc.get('year') != year_filter:
+            if year_filter is not None and chunk.get('year') != year_filter:
                 continue
             
             results.append({
-                **doc,
+                **chunk,
                 'score': float(score)
             })
         
@@ -97,14 +99,14 @@ class BM25Index:
     def save(self):
         """Save index to disk."""
         index_file = self.index_dir / "bm25_index.pkl"
-        docs_file = self.index_dir / "documents.pkl"
+        chunks_file = self.index_dir / "chunks.pkl"  # was documents.pkl
         corpus_file = self.index_dir / "corpus.pkl"
         
         with open(index_file, 'wb') as f:
             pickle.dump(self.bm25, f)
         
-        with open(docs_file, 'wb') as f:
-            pickle.dump(self.documents, f)
+        with open(chunks_file, 'wb') as f:
+            pickle.dump(self.chunks, f)
         
         with open(corpus_file, 'wb') as f:
             pickle.dump(self.tokenized_corpus, f)
@@ -114,23 +116,36 @@ class BM25Index:
     def load(self) -> bool:
         """Load index from disk. Returns True if successful."""
         index_file = self.index_dir / "bm25_index.pkl"
-        docs_file = self.index_dir / "documents.pkl"
+        chunks_file = self.index_dir / "chunks.pkl"  # was documents.pkl
         corpus_file = self.index_dir / "corpus.pkl"
         
-        if not (index_file.exists() and docs_file.exists() and corpus_file.exists()):
+        # For backward compatibility, also check for old documents.pkl
+        if not chunks_file.exists():
+            old_docs_file = self.index_dir / "documents.pkl"
+            if old_docs_file.exists():
+                chunks_file = old_docs_file
+        
+        if not (index_file.exists() and chunks_file.exists() and corpus_file.exists()):
             return False
         
         try:
             with open(index_file, 'rb') as f:
                 self.bm25 = pickle.load(f)
             
-            with open(docs_file, 'rb') as f:
-                self.documents = pickle.load(f)
+            with open(chunks_file, 'rb') as f:
+                loaded = pickle.load(f)
+                # Convert old documents to chunks format if needed
+                if loaded and isinstance(loaded[0], dict):
+                    # If old format doesn't have page_no, add it
+                    for item in loaded:
+                        if 'page_no' not in item:
+                            item['page_no'] = 0  # Mark as whole-document chunk
+                self.chunks = loaded
             
             with open(corpus_file, 'rb') as f:
                 self.tokenized_corpus = pickle.load(f)
             
-            print(f"Index loaded from {self.index_dir} ({len(self.documents)} documents)")
+            print(f"Index loaded from {self.index_dir} ({len(self.chunks)} chunks)")
             return True
         except Exception as e:
             print(f"Failed to load index: {e}")
@@ -139,6 +154,12 @@ class BM25Index:
     def get_stats(self) -> Dict:
         """Get index statistics."""
         return {
-            'total_documents': len(self.documents),
+            'total_chunks': len(self.chunks),
             'indexed': self.bm25 is not None,
         }
+    
+    # Backward compatibility
+    @property
+    def documents(self):
+        """Backward compatibility: documents -> chunks"""
+        return self.chunks

@@ -59,8 +59,9 @@ def create_sources_csv(sources: List[Dict], output_path: Path):
     """Create sources_long.csv with extraction metadata."""
     df = pd.DataFrame(sources)
     
-    # Expected columns: indicator, year, value, url, snippet, confidence, method
-    expected_cols = ['indicator', 'year', 'value', 'url', 'snippet', 'confidence', 'method']
+    # Expected columns: indicator, year, value, url, filename, page_no, snippet, confidence, method, doc_id
+    expected_cols = ['indicator', 'year', 'value', 'url', 'filename', 'page_no', 
+                     'snippet', 'confidence', 'method', 'doc_id']
     for col in expected_cols:
         if col not in df.columns:
             df[col] = ''

@@ -14,8 +14,8 @@ def generate_run_report(output_path: Path, stats: Dict, comune: str,
     - crawl: {pdfs_found, html_found, time}
     - download: {total, downloaded, cached, deduplicated, failed, time, cache_hit_rate}
     - extract: {total, extracted, cached, failed, time, cache_hit_rate}
-    - index: {total_docs, by_year, time}
-    - fill: {total_cells, filled, not_found, coverage, time}
+    - index: {total_chunks, by_year, time}
+    - fill: {total_cells, filled, not_found, coverage, cache_hits, time}
     - not_found_list: [indicators]
     """
     
@@ -51,8 +51,8 @@ def generate_run_report(output_path: Path, stats: Dict, comune: str,
         f"- **Cache hit rate:** {stats.get('extract', {}).get('cache_hit_rate', 0):.1%}",
         f"- **Time:** {stats.get('extract', {}).get('time', 0):.2f}s",
         f"",
-        f"## Indexing",
-        f"- **Total documents indexed:** {stats.get('index', {}).get('total_docs', 0)}",
+        f"## Indexing (Page-Level Chunks)",
+        f"- **Total page chunks indexed:** {stats.get('index', {}).get('total_chunks', 0)}",
     ]
     
     # Add per-year breakdown
@@ -72,6 +72,7 @@ def generate_run_report(output_path: Path, stats: Dict, comune: str,
         f"- **Filled:** {stats.get('fill', {}).get('filled', 0)}",
         f"- **Not found:** {stats.get('fill', {}).get('not_found', 0)}",
         f"- **Coverage:** {stats.get('fill', {}).get('coverage', 0):.1%}",
+        f"- **Memoization cache hits:** {stats.get('fill', {}).get('cache_hits', 0)}",
         f"- **Time:** {stats.get('fill', {}).get('time', 0):.2f}s",
         f"",
     ])
