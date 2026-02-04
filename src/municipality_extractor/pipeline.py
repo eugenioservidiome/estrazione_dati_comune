@@ -104,6 +104,25 @@ def process_single_csv(
                 'section': section
             })
         
+        # Extract year from column name if possible
+        year_for_search = None
+        try:
+            year_for_search = int(col_name)
+            if year_for_search not in config.years_to_fill:
+                year_for_search = None
+        except (ValueError, TypeError):
+            # Try to extract year from column name (e.g., "Anno 2023")
+            import re
+            year_match = re.search(r'20\d{2}', str(col_name))
+            if year_match:
+                candidate_year = int(year_match.group())
+                if candidate_year in config.years_to_fill:
+                    year_for_search = candidate_year
+        
+        # Fallback to first year if not found
+        if not year_for_search:
+            year_for_search = config.years_to_fill[0] if config.years_to_fill else None
+        
         # Search documents with each query
         best_value = None
         best_confidence = 0.0
@@ -125,7 +144,7 @@ def process_single_csv(
                 extraction = extract_value_from_text(
                     text=result['text'],
                     keywords=keywords,
-                    year=config.years_to_fill[0] if config.years_to_fill else None,
+                    year=year_for_search,
                     context_window=config.context_window_chars,
                     min_keywords=config.min_keywords_for_extraction
                 )

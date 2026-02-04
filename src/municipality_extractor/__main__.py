@@ -144,6 +144,7 @@ Examples:
     
     parser.add_argument(
         '--user-agent',
+        default='MunicipalityDataExtractor/1.0 (civic-tech; +https://github.com/eugenioservidiome/estrazione_dati_comune)',
         help='Custom user agent string'
     )
     

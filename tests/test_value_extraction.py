@@ -32,24 +32,58 @@ class TestExtractValueFromText:
         assert abs(result['value'] - 1234.56) < 0.01
     
     def test_returns_none_if_no_year(self):
+        """Test that extraction returns None value when year is not in text."""
         text = "Il numero di dipendenti è 42."
         result = extract_value_from_text(
             text=text,
             year=2023,
             keywords=['dipendenti']
         )
-        # Should return None or have low confidence without year
-        assert result is None or result['confidence'] < 0.3
+        # Should return dict with value=None without year in context
+        assert result is not None
+        assert result['value'] is None or result['confidence'] < 0.3
+    
+    def test_low_confidence_if_no_year_but_value_present(self):
+        """Test that extraction has low confidence when year is missing but value is present."""
+        text = "Il numero di dipendenti è 42 unità totali."
+        result = extract_value_from_text(
+            text=text,
+            year=2023,
+            keywords=['dipendenti'],
+            min_keywords=0  # Allow extraction without strict requirements
+        )
+        # May return a value but with low confidence
+        if result and result['value'] is not None:
+            assert result['confidence'] < 0.5
     
     def test_returns_none_if_no_keywords(self):
+        """Test that extraction returns None value when required keywords are not present."""
         text = "Nel 2023 il valore è 42."
         result = extract_value_from_text(
             text=text,
             year=2023,
             keywords=['parola_non_presente']
         )
-        # Should return None or have low confidence without keywords
-        assert result is None or result['confidence'] < 0.3
+        # Should return dict with value=None without keywords
+        assert result is not None
+        assert result['value'] is None or result['confidence'] < 0.3
+    
+    def test_low_confidence_if_partial_keywords(self):
+        """Test that extraction has lower confidence with partial keyword matches."""
+        text = "Nel 2023 il personale comunale conta 42 dipendenti."
+        result_full = extract_value_from_text(
+            text=text,
+            year=2023,
+            keywords=['dipendenti', 'personale', 'organico']
+        )
+        result_partial = extract_value_from_text(
+            text=text,
+            year=2023,
+            keywords=['organico', 'staff']
+        )
+        # Full keywords should have higher confidence than partial
+        if result_full and result_partial:
+            assert result_full['confidence'] > result_partial['confidence']
     
     def test_includes_snippet(self):
         text = "Nel 2023 il numero di dipendenti comunali è 42 unità."
