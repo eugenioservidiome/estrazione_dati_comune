@@ -4,17 +4,19 @@
 
 ## 🎯 Overview
 
-**Version 2.0** - Complete refactoring with enterprise-grade features:
+**Version 2.1** - Page-level chunking optimization with improved extraction:
 
 1. **Focused web crawler** with sitemap.xml support, robots.txt compliance, and BFS traversal
 2. **SQLite catalog** for PDF/text tracking with SHA1 deduplication
 3. **PyMuPDF primary extraction** with pdfplumber fallback (3x faster)
 4. **Automatic year detection** from URLs, filenames, and document content
-5. **BM25 indexing** (replaced TF-IDF) with incremental updates and disk persistence
-6. **Simplified query generation** (1-2 queries per cell, not 8-20)
-7. **Optional LLM extraction** via OpenAI API with structured outputs and JSON cache
-8. **Full caching** - second run: 0 redownloads, 0 re-extractions
-9. **Comprehensive reporting** with run_report.md and audit CSVs
+5. **Page-level BM25 indexing** - chunks instead of whole documents for better precision
+6. **Simplified query generation** (1-2 queries per cell, no Google operators)
+7. **Improved heuristic extraction** - keyword-first approach, not year-dependent
+8. **Memoization cache** - avoid re-extracting same values from same pages
+9. **Optional LLM extraction** via OpenAI API with structured outputs and JSON cache
+10. **Full caching** - second run: 0 redownloads, 0 re-extractions
+11. **Comprehensive reporting** with run_report.md and audit CSVs including page numbers
 
 ## 🚀 Quick Start
 
@@ -88,16 +90,32 @@ Open `estrazione_dati_comune.ipynb` in Google Colab for interactive usage (uses 
 3. Extract first 2 pages, search for year pattern
 4. Save PDFs in `data/{comune}/{year}/pdf/` or `unknown/pdf/`
 
-### 🔍 BM25 Indexing (not TF-IDF)
+### 🔍 Page-Level BM25 Indexing (v2.1 NEW)
 - **rank_bm25** library for state-of-the-art ranking
-- **Incremental updates** - add documents without full rebuild
+- **Page-level chunks** instead of whole documents for higher precision
+- **Incremental updates** - add chunks without full rebuild
 - **Disk persistence** with pickle
-- **Year filtering** - only index documents with detected_year in target years
+- **Year filtering** - only index chunks with detected_year in target years
+- **Default top_k=8** chunks (more granular than whole documents)
 
 ### 🎯 Simplified Query Generation
 - **1-2 queries per cell** (not 8-20 Google-style queries)
+- **NO Google operators** - pure local keyword search (no site:, filetype:, inurl:, AND, OR)
 - **Canonical query** + optional variant with synonyms
 - **Preserves categorization** logic from v1
+- **Full audit trail** in queries_generated.csv
+
+### 🧮 Improved Heuristic Extraction (v2.1 NEW)
+- **Keyword-first approach** - find keywords, then numbers nearby (300 char window)
+- **Year proximity optional** - small bonus (0.5), not requirement
+- **Enhanced Italian number parsing**:
+  - Handles `1.234,56` → 1234.56
+  - Handles negatives `(1.234,56)` → -1234.56
+  - Handles currency `€ 1.234,56` → 1234.56
+  - Handles percentages `12,5%` → 0.125
+- **Snippet truncation** - max 240 chars centered on match
+- **Memoization cache** - key: (doc_id, page_no, indicator, year)
+- **Early stopping** - confidence >= 0.75 (with LLM) or >= 0.85 (heuristic only)
 - **Full audit trail** in queries_generated.csv
 
 ### 🤖 Optional LLM Extraction
@@ -114,20 +132,24 @@ Open `estrazione_dati_comune.ipynb` in Google Colab for interactive usage (uses 
 - **Politeness**: crawl-delay from robots.txt, configurable default
 - **Focus on PDFs**, HTML optional
 
-### 🇮🇹 Italian Number Normalization
+### 🇮🇹 Italian Number Normalization (Enhanced v2.1)
 - Handles `1.234,56` → 1234.56
 - Handles `1 234,56` → 1234.56
+- Handles negatives `(1.234,56)` → -1234.56
+- Handles currency `€ 1.234,56` or `1.234,56 €` → 1234.56
+- Handles percentages `12,5%` → 0.125
 - Regex extraction from text with context scoring
 
 ### 📁 Folder Structure
 Auto-created workspace layout:
 ```
-data/{comune}/{anno}/pdf/     # Year-specific PDFs
-data/{comune}/{anno}/text/    # Extracted text
-data/{comune}/{anno}/llm/     # LLM cache
-data/{comune}/index/          # BM25 index files
-data/{comune}/unknown/pdf/    # PDFs without detected year
-data/{comune}/catalog.sqlite  # SQLite catalog
+data/{comune}/{anno}/pdf/           # Year-specific PDFs
+data/{comune}/{anno}/text/          # Extracted text (whole document)
+data/{comune}/{anno}/text/*_page_N.txt  # Per-page text chunks (v2.1)
+data/{comune}/{anno}/llm/           # LLM cache
+data/{comune}/index/                # BM25 index files (chunks)
+data/{comune}/unknown/pdf/          # PDFs without detected year
+data/{comune}/catalog.sqlite        # SQLite catalog
 ```
 
 ## 📤 Output Files
@@ -135,14 +157,21 @@ data/{comune}/catalog.sqlite  # SQLite catalog
 All outputs saved to `output_dir`:
 
 1. **`*_filled.csv`** - Original CSVs with filled cells (or 'NOT_FOUND')
-2. **`sources_long.csv`** - Full traceability (indicator, year, value, url, snippet, confidence, method)
+2. **`sources_long.csv`** - Full traceability with **NEW v2.1 columns**:
+   - indicator, year, value
+   - **url, filename, page_no** (page number where value was found)
+   - **snippet** (240 char excerpt showing match)
+   - **confidence** (0-1 score)
+   - **method** (heuristic/llm/external)
+   - **doc_id** (SHA1 hash for document identification)
 3. **`queries_generated.csv`** - Query audit (indicator, category, year, query_1, query_2)
 4. **`run_report.md`** - Comprehensive report with:
    - Comune, domain, years
    - PDFs found/downloaded, cache hit rates
    - Texts extracted, cache hit rates
-   - Documents indexed per year
+   - **Page chunks indexed per year** (v2.1)
    - Cells filled, coverage %
+   - **Memoization cache hits** (v2.1)
    - NOT_FOUND list (top 50)
    - Time per step (crawl/download/extract/index/fill)
 
@@ -469,6 +498,47 @@ Contributions welcome! Areas for improvement:
 ## 📄 License
 
 Open source project for Italian public administration transparency and civic tech.
+
+## 🆕 What's New in v2.1
+
+### Performance Optimizations (Target: <120s fill time, >=10% coverage)
+
+1. **Page-level chunking** instead of whole documents
+   - PDFs split into individual page chunks for indexing
+   - Default `top_k=8` chunks (vs 5-10 whole documents)
+   - Better precision: relevant pages surface faster
+   - Backward compatible: old indexes auto-convert on load
+
+2. **Improved heuristic extraction**
+   - **Keyword-first approach**: find keywords, then numbers nearby (not year-first)
+   - Year proximity is optional bonus (0.5 points), not requirement
+   - Enhanced Italian number parsing (negatives, €, percentages)
+   - Snippet limited to 240 chars for better readability
+   - **Memoization cache**: key = (doc_id, page_no, indicator, year)
+   - **Early stopping**: stop when confidence >= 0.75 (LLM) or 0.85 (heuristic)
+
+3. **Query simplification already done in v2.0**
+   - 1-2 queries per cell (not 8-20)
+   - No Google operators (site:, filetype:, inurl:, AND, OR)
+   - Pure local keyword search
+
+4. **Enhanced traceability**
+   - `sources_long.csv` now includes: **page_no**, **filename**, **doc_id** (SHA1)
+   - Snippet shows exact 240-char context where value was found
+   - Full method tracking (heuristic/llm/external/heuristic_cached)
+
+5. **Better reporting**
+   - Shows page chunks indexed (not just document count)
+   - Tracks memoization cache hits
+   - Clearer metrics: Extracted vs Cached PDFs/Texts
+
+### Testing
+- **76 tests passing** including new test suites for:
+  - Page-level chunking (7 tests)
+  - Query building without operators (16 tests)
+  - Extraction without year proximity (19 tests)
+  - Sources with page numbers (7 tests)
+  - Plus 27 existing tests (numbers, year detection, caching)
 
 ## 🆕 What's New in v2.0
 
