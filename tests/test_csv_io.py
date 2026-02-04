@@ -78,7 +78,7 @@ class TestDetectSectionHeaders:
     """Test section header detection."""
     
     def test_detects_empty_year_columns(self):
-        # Create a row with only 1 filled cell out of 4 (25% < 30% threshold)
+        # Create a row with only 1 filled cell out of 4 total columns (0.25 < 0.3 threshold)
         df = pd.DataFrame({
             'Label': ['Section Header', 'Data Row'],
             '2022': [float('nan'), 50],
@@ -86,7 +86,6 @@ class TestDetectSectionHeaders:
             '2024': [float('nan'), 200]
         })
         sections = detect_section_headers(df)
-        # Row 0 has 1/4 = 0.25 fill rate, which is < 0.3, so it's detected
         assert 0 in sections
     
     def test_does_not_detect_partial_data_as_header(self):
@@ -96,11 +95,11 @@ class TestDetectSectionHeaders:
             '2024': [float('nan'), 300]
         })
         sections = detect_section_headers(df)
-        # Row 0 has 2/3 = 0.67 fill rate (>= 0.3), so it's not a header
+        # Row 0 has all 3 columns filled (1.0 >= 0.3), so it's not a header
         assert 0 not in sections
     
     def test_detects_single_cell_text_row(self):
-        # Create a row with only 1 filled cell out of 4 (25% < 30% threshold)
+        # Create a row with only 1 filled cell out of 4 total columns (0.25 < 0.3 threshold)
         df = pd.DataFrame({
             'Label': ['Long section description text', 'Data Row'],
             'Other': [float('nan'), 'value'],
@@ -108,7 +107,6 @@ class TestDetectSectionHeaders:
             '2023': [float('nan'), 100]
         })
         sections = detect_section_headers(df)
-        # First row has 1/4 = 0.25 fill rate, which is < 0.3, so it's detected
         assert 0 in sections
 
 

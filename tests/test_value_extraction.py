@@ -19,7 +19,7 @@ class TestExtractValueFromText:
         )
         assert result is not None
         assert result['value'] == 42.0
-        assert result['year_found'] is True  # It's a boolean, not the year value
+        assert result['year_found'] is True
     
     def test_extracts_italian_formatted_number(self):
         text = "Nel 2023 il patrimonio era 1.234,56 euro."
