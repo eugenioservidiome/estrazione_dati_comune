@@ -3,11 +3,18 @@ pandas>=2.0.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 trafilatura>=1.6.0
-scikit-learn>=1.3.0
 pdfplumber>=0.10.0
 tqdm>=4.66.0
 lxml>=4.9.0
 rapidfuzz>=3.0.0
+
+# New dependencies for comune_extractor v2.0
+PyMuPDF>=1.23.0  # fitz - primary PDF extraction
+rank-bm25>=0.2.2  # BM25 indexing
+PyYAML>=6.0.0  # YAML config support
+
+# Optional dependencies
+openai>=1.0.0  # LLM extraction (optional)
 
 # Development dependencies
 pytest>=7.4.0
