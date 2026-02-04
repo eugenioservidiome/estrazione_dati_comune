@@ -4,6 +4,10 @@ import re
 from pathlib import Path
 from typing import Optional
 
+# Valid year range for detection
+MIN_VALID_YEAR = 1990
+MAX_VALID_YEAR = 2030
+
 
 def detect_year_from_url(url: str) -> Optional[int]:
     """Detect year from URL or filename using regex."""
@@ -14,8 +18,8 @@ def detect_year_from_url(url: str) -> Optional[int]:
     if matches:
         # Return the most recent year if multiple found
         years = [int(y) for y in matches]
-        # Filter to reasonable range (1990-2030)
-        valid_years = [y for y in years if 1990 <= y <= 2030]
+        # Filter to reasonable range
+        valid_years = [y for y in years if MIN_VALID_YEAR <= y <= MAX_VALID_YEAR]
         if valid_years:
             return max(valid_years)
     
@@ -37,7 +41,7 @@ def detect_year_from_text(text: str, max_chars: int = 5000) -> Optional[int]:
         for year_str in matches:
             year = int(year_str)
             # Filter to reasonable range
-            if 1990 <= year <= 2030:
+            if MIN_VALID_YEAR <= year <= MAX_VALID_YEAR:
                 year_counts[year] = year_counts.get(year, 0) + 1
         
         if year_counts:

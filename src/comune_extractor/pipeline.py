@@ -291,7 +291,7 @@ class Pipeline:
                 method = 'NOT_FOUND'
                 
                 # Try LLM extraction if enabled
-                if llm and llm.enabled and docs:
+                if llm and docs:
                     for doc in docs[:self.config.llm_max_docs]:
                         text = doc['text']
                         llm_dir = get_llm_dir(self.config.workspace / "data",

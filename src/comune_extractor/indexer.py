@@ -2,14 +2,17 @@
 
 import pickle
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from rank_bm25 import BM25Okapi
 from tqdm import tqdm
 
 
 def simple_tokenize(text: str) -> List[str]:
-    """Simple tokenization for Italian text."""
-    # Lowercase and split on whitespace/punctuation
+    """
+    Simple tokenization for Italian text.
+    Converts to lowercase and splits on non-word characters.
+    Suitable for BM25 indexing with minimal preprocessing.
+    """
     import re
     text = text.lower()
     tokens = re.findall(r'\w+', text)
@@ -27,7 +30,7 @@ class BM25Index:
         self.documents: List[Dict] = []  # metadata for each doc
         self.tokenized_corpus: List[List[str]] = []
     
-    def build_index(self, documents: List[Dict[str, any]]):
+    def build_index(self, documents: List[Dict[str, Any]]):
         """
         Build BM25 index from documents.
         Each document should have: {sha1, text, year, url, ...}
@@ -44,7 +47,7 @@ class BM25Index:
         self.bm25 = BM25Okapi(self.tokenized_corpus)
         print(f"Index built with {len(self.documents)} documents")
     
-    def add_documents(self, new_documents: List[Dict[str, any]]):
+    def add_documents(self, new_documents: List[Dict[str, Any]]):
         """Add new documents to existing index (incremental)."""
         if not self.bm25:
             # No existing index, just build fresh

@@ -78,9 +78,10 @@ class LLMExtractor:
         if not self.client:
             return None
         
-        # Limit text length
-        if len(text) > 10000:
-            text = text[:10000]
+        # Limit text length (10k chars ≈ 2.5k tokens, well under API limits)
+        MAX_LLM_TEXT_LENGTH = 10000
+        if len(text) > MAX_LLM_TEXT_LENGTH:
+            text = text[:MAX_LLM_TEXT_LENGTH]
         
         prompt = f"""Extract the value for the following indicator from the text.
 
