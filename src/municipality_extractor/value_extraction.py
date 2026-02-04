@@ -152,7 +152,8 @@ def _find_numeric_candidates(text: str) -> List[Tuple[float, int]]:
     # Pattern for Italian numbers: optional sign, digits with . as thousands separator,
     # optional , as decimal separator, optional currency/percentage
     # Examples: 1.234,56 €  -123,45  12,5%  1234
-    pattern = r'[€$£]?\s*[+-]?\s*\d{1,3}(?:\.\d{3})*(?:,\d+)?(?:\s*[€$£%])?'
+    # Use word boundaries to avoid partial matches
+    pattern = r'\b[€$£]?\s*[+-]?\s*\d{1,3}(?:\.\d{3})*(?:,\d+)?(?:\s*[€$£%])?\b'
     
     for match in re.finditer(pattern, text):
         value_str = match.group(0)
@@ -165,6 +166,10 @@ def _find_numeric_candidates(text: str) -> List[Tuple[float, int]]:
             # Filter out unrealistic values (like years)
             if 1900 <= value <= 2100:
                 # Likely a year, skip
+                continue
+            
+            # Filter out very small values that are likely noise
+            if abs(value) < 0.01:
                 continue
             
             candidates.append((value, position))
