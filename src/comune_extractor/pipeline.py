@@ -186,7 +186,7 @@ class Pipeline:
         print(f"Cache hit rate: {cache_hit_rate:.1%}")
     
     def _build_index(self):
-        """Build BM25 index for target years."""
+        """Build BM25 index for target years with page-level chunks."""
         start = time.time()
         
         index = BM25Index(self.config.index_dir)
@@ -195,8 +195,8 @@ class Pipeline:
         if index.load():
             print("Loaded existing index")
         else:
-            # Build new index
-            documents = []
+            # Build new index with page chunks
+            chunks = []
             
             for year in self.config.years:
                 pdfs = self.catalog.get_pdfs_by_year(year)
@@ -207,41 +207,71 @@ class Pipeline:
                     
                     if text_info:
                         text_path = Path(text_info['text_path'])
-                        if text_path.exists():
-                            text = load_text(text_path)
-                            if text:
-                                documents.append({
-                                    'sha1': sha1,
-                                    'text': text,
-                                    'year': year,
-                                    'url': pdf['url'],
-                                    'filename': pdf['original_name']
-                                })
+                        text_dir = text_path.parent
+                        pages = text_info.get('pages', 1)
+                        
+                        # Try to load per-page texts
+                        from .pdf_text import load_page_texts, extract_text_per_page, save_page_texts
+                        page_texts = load_page_texts(text_dir, sha1, pages)
+                        
+                        # If not available, extract per-page now
+                        if not page_texts:
+                            pdf_path = Path(pdf['local_path'])
+                            if pdf_path.exists():
+                                try:
+                                    page_texts, _, _ = extract_text_per_page(pdf_path)
+                                    # Save for future use
+                                    save_page_texts(page_texts, text_dir, sha1)
+                                except:
+                                    # Fallback to whole document
+                                    text = load_text(text_path)
+                                    if text:
+                                        page_texts = [text]
+                            else:
+                                # Fallback to whole document
+                                text = load_text(text_path)
+                                if text:
+                                    page_texts = [text]
+                        
+                        # Create a chunk for each page
+                        if page_texts:
+                            for page_no, page_text in enumerate(page_texts, start=1):
+                                if page_text.strip():  # Only index non-empty pages
+                                    chunks.append({
+                                        'sha1': sha1,
+                                        'text': page_text,
+                                        'year': year,
+                                        'url': pdf['url'],
+                                        'filename': pdf['original_name'],
+                                        'page_no': page_no,
+                                        'total_pages': len(page_texts)
+                                    })
             
-            index.build_index(documents)
+            print(f"Building index with {len(chunks)} page chunks...")
+            index.build_index(chunks)
             index.save()
         
-        # Get stats
+        # Get stats by year
         by_year = {}
         for year in self.config.years:
-            count = sum(1 for doc in index.documents if doc.get('year') == year)
+            count = sum(1 for chunk in index.chunks if chunk.get('year') == year)
             by_year[year] = count
         
         elapsed = time.time() - start
         self.stats['index'] = {
-            'total_docs': len(index.documents),
+            'total_chunks': len(index.chunks),
             'by_year': by_year,
             'time': elapsed
         }
         
-        print(f"Index contains {len(index.documents)} documents")
+        print(f"Index contains {len(index.chunks)} page chunks")
         for year, count in sorted(by_year.items()):
-            print(f"  {year}: {count} documents")
+            print(f"  {year}: {count} chunks")
         
         self.retriever = Retriever(index)
     
     def _fill_csvs(self):
-        """Fill missing cells in CSVs."""
+        """Fill missing cells in CSVs with memoization."""
         start = time.time()
         
         # Load CSVs
@@ -256,6 +286,9 @@ class Pipeline:
         
         # Initialize external sources
         external = ExternalSources(self.config.allow_external)
+        
+        # Memoization cache: key = (sha1, page_no, normalized_indicator, year)
+        extraction_cache = {}
         
         all_sources = []
         all_queries = []
@@ -277,23 +310,26 @@ class Pipeline:
             
             # Fill cells
             for row_idx, indicator, year in tqdm(missing, desc=f"Filling {csv_name}"):
-                # Generate queries for this cell
+                # Generate queries for this cell (1-2 queries max)
                 queries = generate_queries(indicator, year=year, max_queries=2)
                 
-                # Retrieve documents
-                docs = self.retriever.retrieve_multi_query(queries, 
-                                                          top_k=self.config.top_k,
-                                                          year=year,
-                                                          min_score=self.config.min_score)
+                # Retrieve chunks (pages)
+                chunks = self.retriever.retrieve_multi_query(queries, 
+                                                           top_k=8,  # 8 chunks, not 10 docs
+                                                           year=year,
+                                                           min_score=self.config.min_score)
                 
                 value = None
                 source_info = None
                 method = 'NOT_FOUND'
                 
+                # Normalize indicator for cache key
+                normalized_indicator = indicator.lower().strip()
+                
                 # Try LLM extraction if enabled
-                if llm and docs:
-                    for doc in docs[:self.config.llm_max_docs]:
-                        text = doc['text']
+                if llm and chunks:
+                    for chunk in chunks[:self.config.llm_max_docs]:
+                        text = chunk['text']
                         llm_dir = get_llm_dir(self.config.workspace / "data",
                                             self.config.comune, year)
                         
@@ -304,32 +340,74 @@ class Pipeline:
                                 'indicator': indicator,
                                 'year': year,
                                 'value': value,
-                                'url': doc['url'],
-                                'snippet': result['evidence'][:200],
+                                'url': chunk['url'],
+                                'filename': chunk.get('filename', ''),
+                                'page_no': chunk.get('page_no', 0),
+                                'snippet': result['evidence'][:240],
                                 'confidence': result['confidence'],
-                                'method': 'llm'
+                                'method': 'llm',
+                                'doc_id': chunk.get('sha1', '')
                             }
                             method = 'llm'
                             break
                 
-                # Fallback to heuristic extraction
-                if value is None and docs:
-                    for doc in docs[:3]:
-                        extractions = extract_value_heuristic(doc['text'], 
-                                                             queries, top_k=1)
+                # Fallback to heuristic extraction with memoization
+                if value is None and chunks:
+                    confidence_threshold = 0.75 if llm else 0.85  # Lower threshold if LLM available
+                    
+                    for chunk in chunks[:8]:  # Check up to 8 chunks
+                        sha1 = chunk.get('sha1', '')
+                        page_no = chunk.get('page_no', 0)
+                        cache_key = (sha1, page_no, normalized_indicator, year)
+                        
+                        # Check cache
+                        if cache_key in extraction_cache:
+                            cached_result = extraction_cache[cache_key]
+                            if cached_result:
+                                value = cached_result['value']
+                                source_info = cached_result
+                                method = 'heuristic_cached'
+                                break
+                            else:
+                                continue  # Already tried, no match
+                        
+                        # Extract with improved heuristics
+                        extractions = extract_value_heuristic(
+                            chunk['text'], 
+                            queries, 
+                            year=year,
+                            top_k=1
+                        )
+                        
                         if extractions and extractions[0]['score'] > 0:
-                            value = extractions[0]['value']
-                            source_info = {
+                            # Normalize confidence to 0-1 range
+                            confidence = min(extractions[0]['score'] / 5.0, 1.0)
+                            
+                            result_info = {
                                 'indicator': indicator,
                                 'year': year,
-                                'value': value,
-                                'url': doc['url'],
-                                'snippet': extractions[0]['snippet'][:200],
-                                'confidence': extractions[0]['score'] / 5.0,
-                                'method': 'heuristic'
+                                'value': extractions[0]['value'],
+                                'url': chunk['url'],
+                                'filename': chunk.get('filename', ''),
+                                'page_no': page_no,
+                                'snippet': extractions[0]['snippet'][:240],
+                                'confidence': confidence,
+                                'method': 'heuristic',
+                                'doc_id': sha1
                             }
-                            method = 'heuristic'
-                            break
+                            
+                            # Cache the result
+                            extraction_cache[cache_key] = result_info
+                            
+                            # Early stopping if confidence high enough
+                            if confidence >= confidence_threshold:
+                                value = result_info['value']
+                                source_info = result_info
+                                method = 'heuristic'
+                                break
+                        else:
+                            # Cache negative result
+                            extraction_cache[cache_key] = None
                 
                 # Try external sources if enabled
                 if value is None and external.enabled:
@@ -341,9 +419,12 @@ class Pipeline:
                             'year': year,
                             'value': value,
                             'url': ext_result.get('url', ''),
+                            'filename': '',
+                            'page_no': 0,
                             'snippet': '',
                             'confidence': 1.0,
-                            'method': f"external_{ext_result.get('source', '')}"
+                            'method': f"external_{ext_result.get('source', '')}",
+                            'doc_id': ''
                         }
                         method = 'external'
                 
