@@ -4,13 +4,8 @@ import pytest
 import tempfile
 from pathlib import Path
 
-# Try to import from both old and new package for compatibility
-try:
-    from comune_extractor.config import Config
-    NEW_PACKAGE = True
-except ImportError:
-    from municipality_extractor.config import RunConfig
-    NEW_PACKAGE = False
+# Import from new package
+from comune_extractor.config import Config
 
 
 @pytest.fixture
@@ -23,29 +18,17 @@ def temp_dir():
 @pytest.fixture
 def sample_config(temp_dir):
     """Create a sample configuration for tests."""
-    if NEW_PACKAGE:
-        return Config(
-            base_url='https://www.comune.example.it',
-            comune='Example',
-            years=[2023, 2024],
-            input_dir=temp_dir / 'input',
-            output_dir=temp_dir / 'output',
-            workspace=temp_dir / 'workspace',
-            max_pages=10,
-            crawl_delay=0.1,
-            respect_robots=False
-        )
-    else:
-        return RunConfig(
-            base_url='https://www.comune.example.it',
-            comune='Example',
-            years_to_fill=[2023, 2024],
-            input_dir=temp_dir / 'input',
-            output_dir=temp_dir / 'output',
-            max_pages=10,
-            politeness_delay=0.1,
-            respect_robots=False
-        )
+    return Config(
+        base_url='https://www.comune.example.it',
+        comune='Example',
+        years=[2023, 2024],
+        input_dir=temp_dir / 'input',
+        output_dir=temp_dir / 'output',
+        workspace=temp_dir / 'workspace',
+        max_pages=10,
+        crawl_delay=0.1,
+        respect_robots=False
+    )
 
 
 @pytest.fixture
